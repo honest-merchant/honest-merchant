@@ -108,7 +108,7 @@ footer{margin-top:28px;font-size:14px;color:var(--muted)}
 
   <!-- SHELF -->
   <section class="panel" id="p-shelf" role="tabpanel" aria-labelledby="tab-shelf">
-    <div class="scanbox">
+    <div class="scanbox" hidden>
       <label class="scan" data-mode="shelf">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="12" r="3.5"/></svg>
         Scan a shelf label
@@ -127,7 +127,7 @@ footer{margin-top:28px;font-size:14px;color:var(--muted)}
         <div class="money"><span>$</span><input id="s-price" inputmode="decimal" placeholder="4.99"></div>
       </div>
       <div class="row">
-        <label class="l" for="s-size">Package size</label>
+        <label class="l" for="s-size">Package size <span class="hint">(optional, from the package)</span></label>
         <div class="pair">
           <input id="s-size" inputmode="decimal" placeholder="16">
           <select id="s-size-u" aria-label="Package size unit"></select>
@@ -136,18 +136,19 @@ footer{margin-top:28px;font-size:14px;color:var(--muted)}
       <div class="row">
         <label class="l" for="s-up">Unit price on the label</label>
         <div class="pair">
-          <div class="money"><span>$</span><input id="s-up" inputmode="decimal" placeholder="0.312"></div>
+          <select id="s-up-cur" aria-label="Dollars or cents"><option value="d">$</option><option value="c">¢</option></select>
+          <input id="s-up" inputmode="decimal" placeholder="0.312">
           <span class="per">per</span>
           <select id="s-up-u" aria-label="Unit price unit"></select>
         </div>
       </div>
     </div>
-    <div class="result" id="s-result" aria-live="polite">Enter the three numbers from the label, or scan it.</div>
+    <div class="result" id="s-result" aria-live="polite">Enter the price and unit price from the tag. Add the package size if you know it.</div>
   </section>
 
   <!-- DELI -->
   <section class="panel" id="p-deli" role="tabpanel" aria-labelledby="tab-deli" hidden>
-    <div class="scanbox">
+    <div class="scanbox" hidden>
       <label class="scan" data-mode="weight">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="12" r="3.5"/></svg>
         Scan a scale sticker
@@ -189,7 +190,7 @@ footer{margin-top:28px;font-size:14px;color:var(--muted)}
   </section>
 
 
-  <footer>Scanning reads the label right on your phone, and nothing is uploaded. It can misread small or glossy print, so compare the filled-in numbers with your photo. Differences of a cent or so usually come from rounding.</footer>
+  <footer><b>Tip for iPhone:</b> tap a box, then tap it again and choose <b>Scan Text</b> to point your camera at a number and drop it right in. Differences of a cent or so usually come from rounding.</footer>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
@@ -221,10 +222,21 @@ footer{margin-top:28px;font-size:14px;color:var(--muted)}
   // ---------- shelf math ----------
   function calcShelf(){
     const out = $("s-result");
-    const price = num($("s-price").value), size = num($("s-size").value), up = num($("s-up").value);
+    const price = num($("s-price").value), size = num($("s-size").value);
+    const up = num($("s-up").value) / ($("s-up-cur").value === "c" ? 100 : 1);
     const su = U[$("s-size-u").value], uu = U[$("s-up-u").value];
     out.className = "result";
-    if (!(price>0 && size>0 && up>0)) { out.textContent = "Enter the three numbers from the label, or scan it."; return; }
+    if (!(price>0 && up>0)) { out.textContent = "Enter the price and unit price from the tag. Add the package size if you know it."; return; }
+    if (!(size>0)) {
+      const implied = price / up;
+      const nice = implied >= 100 ? implied.toFixed(0) : implied >= 10 ? implied.toFixed(1) : implied.toFixed(2);
+      const what = uu.d === "c" ? (uu === U.c100 ? `${(implied*100).toFixed(0)} count` : `${nice} count`) : `${nice} ${uu.n}`;
+      out.className = "result warn";
+      out.innerHTML = `<div class="verdict">Package should hold ${what}</div>
+        At ${usd(price)} and ${upFmt(up)} per ${uu.n}, the package needs to contain about <b>${what}</b> for the tag to be honest.
+        <div class="note">Check the size printed on the package. If it says less, you're paying more than the unit price claims. Enter the size above for an exact check.</div>`;
+      return;
+    }
     if (su.d !== uu.d) {
       out.className = "result warn";
       out.innerHTML = `<div class="verdict">Units don't line up</div>The package is measured in ${su.n} but the unit price is per ${uu.n}. Stores sometimes do this on purpose to make comparisons harder. Check that both units are set correctly.`;
@@ -253,7 +265,7 @@ footer{margin-top:28px;font-size:14px;color:var(--muted)}
         <span>Difference</span><b>${pct>=0?"+":""}${pct.toFixed(1)}%</b>
       </div><div class="note">${note}</div>`;
   }
-  ["s-price","s-size","s-up","s-size-u","s-up-u"].forEach(id=>$(id).addEventListener("input",calcShelf));
+  ["s-price","s-size","s-up","s-size-u","s-up-u","s-up-cur"].forEach(id=>$(id).addEventListener("input",calcShelf));
 
   // ---------- deli math ----------
   const WT = {lb:1, oz:1/16, kg:2.20462, g:0.00220462}; // in lb
@@ -426,7 +438,7 @@ footer{margin-top:28px;font-size:14px;color:var(--muted)}
         const r = parseShelf(text);
         if (r.price) { put("s-price", r.price); filled++; }
         if (r.size) { put("s-size", r.size); setSel("s-size-u", r.sizeUnit); filled++; }
-        if (r.up) { put("s-up", r.up); setSel("s-up-u", r.upUnit); filled++; }
+        if (r.up) { put("s-up", r.up); setSel("s-up-cur","d"); setSel("s-up-u", r.upUnit); filled++; }
         calcShelf();
       }
       if (filled === 3) setStatus(mode, "Filled in from your photo. Compare the numbers with the label before trusting the result.");
