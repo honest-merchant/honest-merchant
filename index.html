@@ -119,7 +119,6 @@ footer{margin-top:28px;font-size:14px;color:var(--muted)}
       </label>
       <div class="status" aria-live="polite"></div>
       <img class="shot" alt="Your label photo" hidden>
-      <details class="raw" hidden><summary>What the scanner read</summary><pre></pre></details>
     </div>
     <div class="card">
       <div class="row">
@@ -159,7 +158,6 @@ footer{margin-top:28px;font-size:14px;color:var(--muted)}
       </label>
       <div class="status" aria-live="polite"></div>
       <img class="shot" alt="Your label photo" hidden>
-      <details class="raw" hidden><summary>What the scanner read</summary><pre></pre></details>
     </div>
     <div class="card">
       <div class="row">
@@ -190,10 +188,9 @@ footer{margin-top:28px;font-size:14px;color:var(--muted)}
   </section>
 
 
-  <footer><b>Tip for iPhone:</b> tap a box, then tap it again and choose <b>Scan Text</b> to point your camera at a number and drop it right in. Differences of a cent or so usually come from rounding.</footer>
+  <footer>Scanned photos are read by Google's Gemini AI, which may use them to improve its products. Always check the filled-in numbers against the tag. <b>No scan button?</b> On iPhone, tap a box, tap it again, and choose <b>Scan Text</b> to point your camera at a number and drop it right in. Differences of a cent or so usually come from rounding.</footer>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
 <script>
 (function(){
   // ---------- units ----------
@@ -295,159 +292,73 @@ footer{margin-top:28px;font-size:14px;color:var(--muted)}
   ["d-rate","d-wt","d-charged","d-rate-u","d-wt-u"].forEach(id=>$(id).addEventListener("input",calcDeli));
   $("d-rate-u").addEventListener("change", ()=>{ $("d-rate").closest(".row").querySelector("label").textContent = "Price per " + ({lb:"pound",kg:"kilogram",oz:"ounce"})[$("d-rate-u").value]; });
 
-  // ---------- on-device scanning (Tesseract.js) ----------
-  let busy = false, worker = null, workerReady = null;
+  // ---------- scanning (photo -> your Cloudflare scanner -> Gemini) ----------
+  const WORKER_URL = "https://honest-merchant-scanner.philrone.workers.dev/";
+  const scanOn = /^https:\/\//.test(WORKER_URL);
+  let busy = false;
   const boxFor = m => document.querySelector(`.scan[data-mode="${m}"]`).closest(".scanbox");
   function setStatus(m, text, err){ const s = boxFor(m).querySelector(".status"); s.textContent = text; s.classList.toggle("err", !!err); }
 
-  function getWorker(m){
-    if (!workerReady) {
-      workerReady = Tesseract.createWorker("eng", 1, {
-        logger: p => {
-          if (p.status && /loading|initializ/i.test(p.status)) setStatus(m, "Getting the scanner ready (first time only)…");
-          else if (p.status === "recognizing text") setStatus(m, `Reading the label… ${Math.round((p.progress||0)*100)}%`);
-        }
-      }).then(w => (worker = w));
-    }
-    return workerReady;
-  }
-
-  // Make two cleaned-up copies of the photo: plain grayscale, and pure black-and-white.
-  async function prep(file){
+  // Shrink the photo so it uploads quickly
+  async function shrink(file){
     const url = URL.createObjectURL(file);
     try{
       const img = await new Promise((res, rej)=>{ const i = new Image(); i.onload=()=>res(i); i.onerror=rej; i.src=url; });
-      const long = Math.max(img.naturalWidth, img.naturalHeight);
-      const k = Math.min(2200 / long, 3);           // shrink huge photos, enlarge small ones
-      const W = Math.round(img.naturalWidth*k), H = Math.round(img.naturalHeight*k);
-      const mk = () => { const c = document.createElement("canvas"); c.width=W; c.height=H; return c; };
-      const gray = mk(), g = gray.getContext("2d");
-      g.drawImage(img, 0, 0, W, H);
-      const d = g.getImageData(0,0,W,H), a = d.data, hist = new Array(256).fill(0);
-      for (let i=0;i<a.length;i+=4){ const y = (0.299*a[i] + 0.587*a[i+1] + 0.114*a[i+2])|0; a[i]=a[i+1]=a[i+2]=y; hist[y]++; }
-      g.putImageData(d,0,0);
-      // Otsu threshold
-      const total = W*H; let sum=0; for (let t=0;t<256;t++) sum += t*hist[t];
-      let sB=0, wB=0, best=0, thr=128;
-      for (let t=0;t<256;t++){ wB+=hist[t]; if(!wB) continue; const wF=total-wB; if(!wF) break;
-        sB+=t*hist[t]; const mB=sB/wB, mF=(sum-sB)/wF, v=wB*wF*(mB-mF)*(mB-mF); if (v>best){best=v;thr=t;} }
-      const bw = mk(), b = bw.getContext("2d"), d2 = b.createImageData(W,H), o = d2.data;
-      for (let i=0;i<a.length;i+=4){ const v = a[i] > thr ? 255 : 0; o[i]=o[i+1]=o[i+2]=v; o[i+3]=255; }
-      b.putImageData(d2,0,0);
-      return [gray, bw];
+      const k = Math.min(1, 1600 / Math.max(img.naturalWidth, img.naturalHeight));
+      const c = document.createElement("canvas");
+      c.width = Math.round(img.naturalWidth*k); c.height = Math.round(img.naturalHeight*k);
+      c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+      return c.toDataURL("image/jpeg", 0.85).split(",")[1];
     } finally { URL.revokeObjectURL(url); }
-  }
-
-  const UNIT_MAP = [
-    [/^fl\.?\s*oz|^fluid\s*oun/i,"floz"],[/^oz|^ounce/i,"oz"],[/^lbs?|^pound/i,"lb"],
-    [/^kg|^kilo/i,"kg"],[/^g\b|^gram/i,"g"],[/^ml|^millil/i,"ml"],[/^l\b|^lt|^liter|^litre/i,"l"],
-    [/^gal/i,"gal"],[/^qt|^quart/i,"qt"],[/^pt|^pint/i,"pt"],[/^ct|^count|^each|^ea\b|^pk|^pack/i,"ct"]
-  ];
-  const unitOf = s => { for (const [re,u] of UNIT_MAP) if (re.test(s.trim())) return u; return null; };
-  const UNIT_RE = "(fl\\.?\\s*oz|fluid\\s*ounces?|oz|ounces?|lbs?|pounds?|kg|g|grams?|ml|l|lt|liters?|gal|qt|pt|ct|count|each|ea|pk)";
-
-  function parseShelf(raw){
-    const t = raw.replace(/[|]/g," ").replace(/[ \t]+/g," ");
-    const r = {};
-    // unit price: "$0.31 per oz", "31.2¢ / oz", "0.312 PER OUNCE"; also "per 100 ct"
-    const upRe = new RegExp("\\$?\\s*(\\d*[.,]?\\d+)\\s*(¢|c\\b)?\\s*(?:per|/|PER)\\s*(100\\s*)?" + UNIT_RE, "i");
-    const up = t.match(upRe);
-    if (up) {
-      let v = parseFloat(up[1].replace(",", "."));
-      if (up[2] || (!/\$/.test(up[0]) && v >= 1 && !/\./.test(up[1]) && v > 20)) v = v/100;
-      r.up = Math.round(v*10000)/10000; r.upUnit = up[3] ? "c100" : unitOf(up[4]);
-    }
-    const rest = up ? t.replace(up[0], " ") : t;
-    // package size: "16 oz", "12 fl oz", "1.5 lb" (not following per or /)
-    const sizeRe = new RegExp("(\\d+(?:\\.\\d+)?)\\s*" + UNIT_RE + "\\b", "ig");
-    let m, sizes = [];
-    while ((m = sizeRe.exec(rest))) {
-      const before = rest.slice(Math.max(0, m.index-5), m.index);
-      if (/(per|\/)\s*$/i.test(before)) continue;
-      sizes.push({v: parseFloat(m[1]), u: unitOf(m[2])});
-    }
-    sizes = sizes.filter(s => s.v > 0 && s.u);
-    if (sizes.length) { r.size = sizes[0].v; r.sizeUnit = sizes[0].u; }
-    // retail price: dollar amounts, skipping "reg/was" prices; big shelf prices often print as "4 99"
-    const lines = rest.split(/\n/);
-    const cands = [];
-    for (const ln of lines) {
-      const isReg = /\b(reg|regular|was|orig)\b/i.test(ln);
-      const pr = /\$\s?(\d{1,3})(?:[.,](\d{2})|\s(\d{2})\b)?/g;
-      let x; while ((x = pr.exec(ln))) {
-        const cents = x[2] || x[3];
-        const v = parseFloat(x[1] + "." + (cents || "00"));
-        if (v > 0 && v < 500) cands.push({v, isReg, hadCents: !!cents});
-      }
-      if (!/\$/.test(ln)) { const y = ln.match(/^\s*(\d{1,2})\s?[.,]?\s?(\d{2})\s*$/); if (y) cands.push({v: parseFloat(y[1]+"."+y[2]), isReg, hadCents:true}); }
-    }
-    const now = cands.filter(c => !c.isReg && c.v !== r.up);
-    const reg = cands.filter(c => c.isReg);
-    if (now.length) r.price = Math.max(...now.map(c=>c.v));
-    if (reg.length) r.regular = reg[0].v;
-    return r;
-  }
-
-  function parseWeight(raw){
-    const t = raw.replace(/[|]/g," ");
-    const nums = (t.match(/\d+[.,]\d{2,3}/g) || []).map(s => parseFloat(s.replace(",", ".")));
-    const r = {};
-    // Scale stickers print weight × price/lb = total; find the trio that multiplies out.
-    let best = null;
-    for (let i=0;i<nums.length;i++) for (let j=0;j<nums.length;j++) for (let k=0;k<nums.length;k++){
-      if (i===j||j===k||i===k) continue;
-      const w=nums[i], p=nums[j], tot=nums[k];
-      if (w<=0 || w>30 || p<=0) continue;
-      const err = Math.abs(w*p - tot);
-      if (err <= 0.03 && (!best || err < best.err)) best = {w,p,tot,err};
-    }
-    if (best) { r.wt = best.w; r.rate = best.p; r.total = best.tot; return r; }
-    // otherwise use labels near the numbers
-    const grab = re => { const m = t.match(re); return m ? parseFloat(m[1].replace(",", ".")) : undefined; };
-    r.rate  = grab(/(?:\$\s*\/\s*lb|price\s*\/?\s*lb|per\s*lb|\/\s*lb)[^\d]{0,12}(\d+[.,]\d{2})/i) ?? grab(/(\d+[.,]\d{2})\s*(?:\/|per)\s*lb/i);
-    r.wt    = grab(/net\s*wt[^\d]{0,12}(\d+[.,]\d{1,3})/i) ?? grab(/(\d+[.,]\d{2,3})\s*lb\b/i);
-    r.total = grab(/total[^\d]{0,15}(\d+[.,]\d{2})/i) ?? grab(/you\s*pay[^\d]{0,12}(\d+[.,]\d{2})/i);
-    return r;
   }
 
   function put(id, v){ if (v !== null && v !== undefined && isFinite(v)) $(id).value = v; }
   function setSel(id, v){ const s=$(id); if (v && [...s.options].some(o=>o.value===v)) s.value = v; }
+  function clear(ids){ ids.forEach(id => $(id).value = ""); }
 
   async function scan(file, mode){
     busy = true;
     document.querySelectorAll(".scan,.alt").forEach(b=>b.classList.add("busy"));
     const shot = boxFor(mode).querySelector(".shot");
     shot.src = URL.createObjectURL(file); shot.hidden = false;
-    setStatus(mode, "Getting the scanner ready…");
+    setStatus(mode, "Reading the tag…");
     try{
-      if (!window.Tesseract) throw new Error("noscanner");
-      const [w, imgs] = await Promise.all([getWorker(mode), prep(file)]);
-      await w.setParameters({ tessedit_pageseg_mode: "11", preserve_interword_spaces: "1" });
-      let text = "";
-      for (const c of imgs) { const { data } = await w.recognize(c); text += (data.text || "") + "\n"; }
-      const raw = boxFor(mode).querySelector(".raw");
-      raw.hidden = false; raw.querySelector("pre").textContent = text.trim() || "(nothing)";
-      let filled = 0;
-      if (mode === "weight") {
-        const r = parseWeight(text);
-        if (r.rate) { put("d-rate", r.rate); setSel("d-rate-u","lb"); $("d-rate-u").dispatchEvent(new Event("change")); filled++; }
-        if (r.wt) { put("d-wt", r.wt); setSel("d-wt-u","lb"); filled++; }
-        if (r.total) { put("d-charged", r.total); filled++; }
+      const image = await shrink(file);
+      const resp = await fetch(WORKER_URL, { method:"POST", headers:{ "Content-Type":"application/json" },
+        body: JSON.stringify({ image, mime:"image/jpeg", mode }) });
+      const r = await resp.json().catch(()=>({ error:"bad_reply" }));
+      if (!resp.ok || r.error) {
+        const msg = {
+          rate_limited: "You've hit the scan limit for now. Try again in a bit, or type the numbers in.",
+          quota: "The free scans are used up for today. Type the numbers in, or try again tomorrow.",
+          origin: "This scanner isn't set up for this web address yet.",
+          no_key: "The scanner is missing its key. (Setup step not finished.)"
+        }[r.error] || `Couldn't read that photo (${r.error || resp.status}). Try again or type the numbers in.`;
+        setStatus(mode, msg, true); return;
+      }
+      if (r.kind === "unreadable") { setStatus(mode, "Couldn't read that tag. Try again closer and straight on, without glare.", true); return; }
+      if (r.kind === "weight") {
+        show(1); mode = "weight";
+        clear(["d-rate","d-wt","d-charged"]);
+        put("d-rate", r.price_per_weight); setSel("d-rate-u", r.price_per_weight_unit || "lb");
+        $("d-rate-u").dispatchEvent(new Event("change"));
+        put("d-wt", r.net_weight); setSel("d-wt-u", r.net_weight_unit || "lb");
+        put("d-charged", r.total_price);
         calcDeli();
       } else {
-        const r = parseShelf(text);
-        if (r.price) { put("s-price", r.price); filled++; }
-        if (r.size) { put("s-size", r.size); setSel("s-size-u", r.sizeUnit); filled++; }
-        if (r.up) { put("s-up", r.up); setSel("s-up-cur","d"); setSel("s-up-u", r.upUnit); filled++; }
+        show(0); mode = "shelf";
+        clear(["s-price","s-size","s-up"]);
+        put("s-price", r.price);
+        put("s-size", r.size); setSel("s-size-u", r.size_unit);
+        put("s-up", r.unit_price); setSel("s-up-cur","d"); setSel("s-up-u", r.unit_price_unit);
         calcShelf();
       }
-      if (filled === 3) setStatus(mode, "Filled in from your photo. Compare the numbers with the label before trusting the result.");
-      else if (filled > 0) setStatus(mode, `Read ${filled} of 3 numbers. Type the rest in from the photo above.`, true);
-      else setStatus(mode, "Couldn't read the numbers. Try again closer and straight on, without glare, or type them in.", true);
+      let msg = (r.name ? r.name + ": " : "") + "filled in from your photo. Check the numbers match the tag.";
+      if (r.regular_price) msg += ` Regular price was ${usd(r.regular_price)}.`;
+      if (r.note) msg += " " + r.note;
+      setStatus(mode, msg);
     } catch(e){
-      setStatus(mode, e && e.message === "noscanner"
-        ? "The scanner didn't load. Check your internet connection and reload the page."
-        : "Something went wrong reading the photo (" + ((e && e.message) || e) + "). Try another photo or type the numbers in.", true);
+      setStatus(mode, "Couldn't reach the scanner. Check your connection and try again.", true);
     } finally {
       busy = false;
       document.querySelectorAll(".scanbox input[type=file]").forEach(i=>i.value="");
@@ -455,6 +366,7 @@ footer{margin-top:28px;font-size:14px;color:var(--muted)}
     }
   }
 
+  if (scanOn) document.querySelectorAll(".scanbox").forEach(b=>b.hidden=false);
   document.querySelectorAll(".scanbox input[type=file]").forEach(inp=>inp.addEventListener("change", ()=>{
     const f = inp.files && inp.files[0];
     if (!f || busy) return;
