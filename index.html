@@ -81,6 +81,9 @@ select{width:auto;flex:0 0 auto;padding-right:8px}
 .per{align-self:center;color:var(--muted);flex:0 0 auto}
 input:focus,select:focus{outline:none;border-color:var(--ink)}
 :focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.row.needs input,.row.needs select{border-color:var(--warn);background:var(--warn-bg)}
+.ask{display:none;margin-top:6px;font-size:15px;font-weight:600;color:var(--warn)}
+.row.needs .ask{display:block}
 .result{margin-top:16px;border-radius:14px;padding:16px;background:var(--field);color:var(--muted)}
 .result.good{background:var(--good-bg);color:var(--ink)}
 .result.warn{background:var(--warn-bg);color:var(--ink)}
@@ -131,6 +134,7 @@ footer{margin-top:28px;font-size:14px;color:var(--muted)}
           <input id="s-size" inputmode="decimal" placeholder="16">
           <select id="s-size-u" aria-label="Package size unit"></select>
         </div>
+        <div class="ask" id="s-size-ask">⬆ Check the package and enter its net weight or size here.</div>
       </div>
       <div class="row">
         <label class="l" for="s-up">Unit price on the label</label>
@@ -178,6 +182,7 @@ footer{margin-top:28px;font-size:14px;color:var(--muted)}
             <option value="lb">lb</option><option value="oz">oz</option><option value="kg">kg</option><option value="g">g</option>
           </select>
         </div>
+        <div class="ask" id="d-wt-ask">⬆ Enter the weight from the package label or scale.</div>
       </div>
       <div class="row">
         <label class="l" for="d-charged">Price on the sticker <span class="hint">(optional)</span></label>
@@ -223,8 +228,10 @@ footer{margin-top:28px;font-size:14px;color:var(--muted)}
     const up = num($("s-up").value) / ($("s-up-cur").value === "c" ? 100 : 1);
     const su = U[$("s-size-u").value], uu = U[$("s-up-u").value];
     out.className = "result";
+    $("s-size").closest(".row").classList.remove("needs");
     if (!(price>0 && up>0)) { out.textContent = "Enter the price and unit price from the tag. Add the package size if you know it."; return; }
     if (!(size>0)) {
+      $("s-size").closest(".row").classList.add("needs");
       const implied = price / up;
       const nice = implied >= 100 ? implied.toFixed(0) : implied >= 10 ? implied.toFixed(1) : implied.toFixed(2);
       const what = uu.d === "c" ? (uu === U.c100 ? `${(implied*100).toFixed(0)} count` : `${nice} count`) : `${nice} ${uu.n}`;
@@ -271,7 +278,8 @@ footer{margin-top:28px;font-size:14px;color:var(--muted)}
     const rate = num($("d-rate").value), wt = num($("d-wt").value), charged = num($("d-charged").value);
     const ru = $("d-rate-u").value, wu = $("d-wt-u").value;
     out.className = "result";
-    if (!(rate>0 && wt>0)) { out.textContent = "Enter the price per pound and the weight to see what it should cost."; return; }
+    $("d-wt").closest(".row").classList.toggle("needs", rate>0 && !(wt>0));
+    if (!(rate>0 && wt>0)) { out.textContent = rate>0 ? "Enter the weight to see what it should cost." : "Enter the price per pound and the weight to see what it should cost."; return; }
     const lbs = wt * WT[wu];
     const expected = Math.round(rate / WT[ru] * lbs * 100) / 100;
     let html = `<div>It should cost</div><div class="big">${usd(expected)}</div>
@@ -337,6 +345,7 @@ footer{margin-top:28px;font-size:14px;color:var(--muted)}
         setStatus(mode, msg, true); return;
       }
       if (r.kind === "unreadable") { setStatus(mode, "Couldn't read that tag. Try again closer and straight on, without glare.", true); return; }
+      let needed = null;
       if (r.kind === "weight") {
         show(1); mode = "weight";
         clear(["d-rate","d-wt","d-charged"]);
@@ -345,17 +354,25 @@ footer{margin-top:28px;font-size:14px;color:var(--muted)}
         put("d-wt", r.net_weight); setSel("d-wt-u", r.net_weight_unit || "lb");
         put("d-charged", r.total_price);
         calcDeli();
+        if (!(r.net_weight > 0)) needed = "d-wt";
       } else {
         show(0); mode = "shelf";
         clear(["s-price","s-size","s-up"]);
         put("s-price", r.price);
         put("s-size", r.size); setSel("s-size-u", r.size_unit);
         put("s-up", r.unit_price); setSel("s-up-cur","d"); setSel("s-up-u", r.unit_price_unit);
+        if (!(r.size > 0) && r.unit_price_unit) setSel("s-size-u", r.unit_price_unit === "c100" ? "ct" : r.unit_price_unit);
         calcShelf();
+        if (!(r.size > 0) && r.price && r.unit_price) needed = "s-size";
       }
       let msg = (r.name ? r.name + ": " : "") + "filled in from your photo. Check the numbers match the tag.";
       if (r.regular_price) msg += ` Regular price was ${usd(r.regular_price)}.`;
       if (r.note) msg += " " + r.note;
+      if (needed) {
+        msg += needed === "s-size" ? " The tag doesn't show the package size, so enter it from the package below." : " The weight wasn't readable, so enter it below.";
+        $(needed).scrollIntoView({ behavior: "smooth", block: "center" });
+        setTimeout(() => $(needed).focus({ preventScroll: true }), 400);
+      }
       setStatus(mode, msg);
     } catch(e){
       setStatus(mode, "Couldn't reach the scanner. Check your connection and try again.", true);
