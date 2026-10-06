@@ -288,12 +288,12 @@ footer{margin-top:28px;font-size:14px;color:var(--muted)}
     const close = Math.abs(pct) <= 5;
     let cls, head, note;
     if (ok) { cls="good"; head="✓ The label checks out"; note="The unit price matches the shelf price, allowing for normal rounding." + mixNote; }
-    else if (close) { cls="warn"; head="≈ Slightly off"; note = diff>0
-        ? `The unit price makes it look a bit cheaper than it is. You'd pay ${usd(diff)} more than the label's unit price suggests.`
-        : `The unit price makes it look a bit pricier than it is, which works in your favor by ${usd(-diff)}.`; }
-    else { cls="bad"; head="✗ The label doesn't match"; note = diff>0
-        ? `The unit price makes this look cheaper than it really is. At the shelf price you're paying ${usd(diff)} more than the unit price suggests. If there's a sale tag, the unit price may still be based on the regular price.`
-        : `The unit price is higher than the real cost, so this is actually ${usd(-diff)} cheaper than it looks. The label may be showing the regular price's unit price during a sale.`; }
+    else if (diff < 0) { cls="info"; head="ℹ Label doesn't match, in your favor"; note =
+        `The real unit price is lower than the tag says, so this is actually ${usd(-diff)} cheaper than the unit price suggests. Nothing to worry about, just good to know. During a sale, the tag may still show the regular price's unit price.`; }
+    else if (close) { cls="warn"; head="≈ Slightly off"; note =
+        `The unit price makes it look a bit cheaper than it is. You'd pay ${usd(diff)} more than the label's unit price suggests.`; }
+    else { cls="bad"; head="✗ The label doesn't match"; note =
+        `The unit price makes this look cheaper than it really is. At the shelf price you're paying ${usd(diff)} more than the unit price suggests. If there's a sale tag, the unit price may still be based on the regular price.`; }
     out.className = "result " + cls;
     out.innerHTML = `<div class="verdict">${head}</div>
       <div class="figs">
@@ -324,7 +324,7 @@ footer{margin-top:28px;font-size:14px;color:var(--muted)}
       let cls, head, note;
       if (Math.abs(diff) <= 0.02) { cls="good"; head="✓ The sticker checks out"; note="The price charged matches the weight and price per pound."; }
       else if (diff > 0) { cls="bad"; head=`✗ Overcharged by ${usd(diff)}`; note="Ask the counter to reweigh it. If the container or paper wasn't subtracted (tare), the weight can come out high."; }
-      else { cls="warn"; head=`≈ Undercharged by ${usd(-diff)}`; note="The sticker is lower than the math. Good for you, but worth knowing the scale or rate may be off."; }
+      else { cls="info"; head=`ℹ Doesn't match, in your favor`; note=`The sticker is ${usd(-diff)} lower than the weight and price per pound add up to. Nothing to worry about, just good to know.`; }
       out.className = "result " + cls;
       html = `<div class="verdict">${head}</div>
         <div class="figs"><span>Should cost</span><b>${usd(expected)}</b><span>Sticker says</span><b>${usd(charged)}</b><span>Weight in pounds</span><b>${lbs.toFixed(3)} lb</b></div>
