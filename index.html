@@ -87,6 +87,8 @@ input:focus,select:focus{outline:none;border-color:var(--ink)}
 .result{margin-top:16px;border-radius:14px;padding:16px;background:var(--field);color:var(--muted)}
 .result.good{background:var(--good-bg);color:var(--ink)}
 .result.warn{background:var(--warn-bg);color:var(--ink)}
+.result.info{background:var(--field);color:var(--ink)}
+.info .verdict{color:var(--ink)}
 .result.bad{background:var(--bad-bg);color:var(--ink)}
 .verdict{font-family:"Barlow Condensed","Arial Narrow",sans-serif;font-weight:700;font-size:28px;line-height:1.1;margin-bottom:8px}
 .good .verdict{color:var(--good)} .warn .verdict{color:var(--warn)} .bad .verdict{color:var(--bad)}
@@ -129,12 +131,16 @@ footer{margin-top:28px;font-size:14px;color:var(--muted)}
         <div class="money"><span>$</span><input id="s-price" inputmode="decimal" placeholder="4.99"></div>
       </div>
       <div class="row">
-        <label class="l" for="s-size">Package size <span class="hint">(optional, from the package)</span></label>
+        <label class="l" for="s-size">Package size <span class="hint">(each item, from the package)</span></label>
         <div class="pair">
           <input id="s-size" inputmode="decimal" placeholder="16">
           <select id="s-size-u" aria-label="Package size unit"></select>
         </div>
         <div class="ask" id="s-size-ask">⬆ Check the package and enter its net weight or size here.</div>
+      </div>
+      <div class="row">
+        <label class="l" for="s-count">Items in the pack <span class="hint">(for multi-packs, like a 12-pack of cans)</span></label>
+        <input id="s-count" inputmode="numeric" placeholder="1">
       </div>
       <div class="row">
         <label class="l" for="s-up">Unit price on the label</label>
@@ -222,14 +228,32 @@ footer{margin-top:28px;font-size:14px;color:var(--muted)}
   tabs.forEach(([t],i)=> $(t).addEventListener("click", ()=>show(i)));
 
   // ---------- shelf math ----------
+  let noUnitPrice = false; // set when a scanned tag has no unit price
   function calcShelf(){
     const out = $("s-result");
-    const price = num($("s-price").value), size = num($("s-size").value);
+    const price = num($("s-price").value), each = num($("s-size").value);
+    const count = num($("s-count").value) > 0 ? num($("s-count").value) : 1;
+    const size = each * count;
     const up = num($("s-up").value) / ($("s-up-cur").value === "c" ? 100 : 1);
     const su = U[$("s-size-u").value], uu = U[$("s-up-u").value];
     out.className = "result";
     $("s-size").closest(".row").classList.remove("needs");
+    if (price>0 && !(up>0) && noUnitPrice) {
+      out.className = "result info";
+      out.innerHTML = `<div class="verdict">ℹ Not sold by weight or volume</div>
+        This tag has no unit price, which is normal for single items like tools, electronics, and housewares. There's nothing to check here. The shelf price is <b>${usd(price)}</b>.
+        <div class="note">Honest Merchant checks items sold by weight, volume, or count, like groceries and household supplies.</div>`;
+      return;
+    }
     if (!(price>0 && up>0)) { out.textContent = "Enter the price and unit price from the tag. Add the package size if you know it."; return; }
+    // Per-each pricing on a single item: the unit price is just the price.
+    if (uu.d === "c" && uu !== U.c100 && !(size>0) && Math.abs(price/up - 1) < 0.01) {
+      out.className = "result info";
+      out.innerHTML = `<div class="verdict">ℹ Sold per item</div>
+        The unit price (${upFmt(up)} each) is simply the price of one item, and it matches the shelf price. This item isn't sold by weight or volume.
+        <div class="note">If the package holds more than one, enter the count in "Items in the pack" to check the per-item price.</div>`;
+      return;
+    }
     if (!(size>0)) {
       $("s-size").closest(".row").classList.add("needs");
       const implied = price / up;
@@ -238,23 +262,32 @@ footer{margin-top:28px;font-size:14px;color:var(--muted)}
       out.className = "result warn";
       out.innerHTML = `<div class="verdict">Package should hold ${what}</div>
         At ${usd(price)} and ${upFmt(up)} per ${uu.n}, the package needs to contain about <b>${what}</b> for the tag to be honest.
-        <div class="note">Check the size printed on the package. If it says less, you're paying more than the unit price claims. Enter the size above for an exact check.</div>`;
+        <div class="note">Check the size printed on the package (for a multi-pack, size × number of items). If it's less, you're paying more than the unit price claims. Enter it above for an exact check.</div>`;
       return;
     }
-    if (su.d !== uu.d) {
+    // Drinks are often sized in "oz" with a unit price per "fl oz" (or the reverse); treat those as the same.
+    let mixNote = "";
+    let suU = su;
+    const pair = [su.n, uu.n].sort().join("|");
+    if (pair === "fl oz|oz") { suU = uu; mixNote = " The tag mixes oz and fl oz, so they were treated as the same, which is right for drinks."; }
+    if (suU.d !== uu.d) {
       out.className = "result warn";
       out.innerHTML = `<div class="verdict">Units don't line up</div>The package is measured in ${su.n} but the unit price is per ${uu.n}. Stores sometimes do this on purpose to make comparisons harder. Check that both units are set correctly.`;
       return;
     }
-    const unitsInPkg = size * su.f / uu.f;            // package size expressed in unit-price units
+    const unitsInPkg = size * suU.f / uu.f;            // package size expressed in unit-price units
     const realUP = price / unitsInPkg;                 // what the unit price should be
     const implied = up * unitsInPkg;                   // what the package should cost at the label's unit price
     const diff = price - implied;                      // + means you pay more than the unit price suggests
     const pct = (realUP - up) / up * 100;
-    const ok = Math.abs(diff) <= 0.02 || Math.abs(pct) <= 1;
+    // Tags round the unit price (e.g. 4.17¢ shows as 4¢), so allow half of the last printed digit.
+    const typed = String($("s-up").value).trim(), dec = (typed.split(".")[1] || "").length;
+    const step = Math.pow(10, -dec) / ($("s-up-cur").value === "c" ? 100 : 1);
+    const rounds = Math.abs(realUP - up) <= step / 2 + 1e-9;
+    const ok = rounds || Math.abs(diff) <= 0.02 || Math.abs(pct) <= 1;
     const close = Math.abs(pct) <= 5;
     let cls, head, note;
-    if (ok) { cls="good"; head="✓ The label checks out"; note="The unit price matches the shelf price, allowing for normal rounding."; }
+    if (ok) { cls="good"; head="✓ The label checks out"; note="The unit price matches the shelf price, allowing for normal rounding." + mixNote; }
     else if (close) { cls="warn"; head="≈ Slightly off"; note = diff>0
         ? `The unit price makes it look a bit cheaper than it is. You'd pay ${usd(diff)} more than the label's unit price suggests.`
         : `The unit price makes it look a bit pricier than it is, which works in your favor by ${usd(-diff)}.`; }
@@ -267,9 +300,11 @@ footer{margin-top:28px;font-size:14px;color:var(--muted)}
         <span>Label says</span><b>${upFmt(up)} / ${uu.n}</b>
         <span>Real unit price</span><b>${upFmt(realUP)} / ${uu.n}</b>
         <span>Difference</span><b>${pct>=0?"+":""}${pct.toFixed(1)}%</b>
-      </div><div class="note">${note}</div>`;
+        ${count > 1 ? `<span>Total in pack</span><b>${+size.toFixed(2)} ${suU.n}</b>` : ""}
+      </div><div class="note">${note}${cls !== "good" ? mixNote : ""}</div>`;
   }
-  ["s-price","s-size","s-up","s-size-u","s-up-u","s-up-cur"].forEach(id=>$(id).addEventListener("input",calcShelf));
+  $("s-up").addEventListener("input", ()=>{ noUnitPrice = false; });
+  ["s-price","s-size","s-count","s-up","s-size-u","s-up-u","s-up-cur"].forEach(id=>$(id).addEventListener("input",calcShelf));
 
   // ---------- deli math ----------
   const WT = {lb:1, oz:1/16, kg:2.20462, g:0.00220462}; // in lb
@@ -357,17 +392,20 @@ footer{margin-top:28px;font-size:14px;color:var(--muted)}
         if (!(r.net_weight > 0)) needed = "d-wt";
       } else {
         show(0); mode = "shelf";
-        clear(["s-price","s-size","s-up"]);
+        clear(["s-price","s-size","s-count","s-up"]);
+        noUnitPrice = !(r.unit_price > 0);
         put("s-price", r.price);
-        put("s-size", r.size); setSel("s-size-u", r.size_unit);
+        put("s-size", r.size); setSel("s-size-u", r.size_unit); if (r.pack_count > 1) put("s-count", r.pack_count);
         put("s-up", r.unit_price); setSel("s-up-cur","d"); setSel("s-up-u", r.unit_price_unit);
         if (!(r.size > 0) && r.unit_price_unit) setSel("s-size-u", r.unit_price_unit === "c100" ? "ct" : r.unit_price_unit);
         calcShelf();
-        if (!(r.size > 0) && r.price && r.unit_price) needed = "s-size";
+        const perEach = r.unit_price_unit === "ct" && r.price && Math.abs(r.price / r.unit_price - 1) < 0.01;
+        if (!(r.size > 0) && r.price && r.unit_price && !perEach && r.sold_by !== "each") needed = "s-size";
       }
       let msg = (r.name ? r.name + ": " : "") + "filled in from your photo. Check the numbers match the tag.";
       if (r.regular_price) msg += ` Regular price was ${usd(r.regular_price)}.`;
       if (r.note) msg += " " + r.note;
+      if (r.kind !== "weight" && mode === "shelf" && (noUnitPrice || r.sold_by === "each")) msg = (r.name ? r.name + ": " : "") + "this item isn't sold by weight or volume, so there's no unit price to check.";
       if (needed) {
         msg += needed === "s-size" ? " The tag doesn't show the package size, so enter it from the package below." : " The weight wasn't readable, so enter it below.";
         $(needed).scrollIntoView({ behavior: "smooth", block: "center" });
