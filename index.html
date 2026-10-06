@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Honest Merchant</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Honest Merchant">
+<meta name="theme-color" content="#FFD447">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#F7F8F5; --card:#FFFFFF; --ink:#1C2621; --muted:#5C6862; --rule:#D8DDD6;
+  --tag:#FFD447; --tag-ink:#2A2306; --good:#1E7A4C; --good-bg:#E3F3EA;
+  --warn:#9A6400; --warn-bg:#FFF3D6; --bad:#B8322A; --bad-bg:#FBE5E2; --field:#F1F3EF;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#151B18; --card:#1E2622; --ink:#E9EEEA; --muted:#9AA69F; --rule:#34403A;
+    --tag:#F2C533; --tag-ink:#231C02; --good:#5FCB92; --good-bg:#1C3328;
+    --warn:#F0B54A; --warn-bg:#382C12; --bad:#F07A70; --bad-bg:#3A1E1B; --field:#262F2A;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#151B18; --card:#1E2622; --ink:#E9EEEA; --muted:#9AA69F; --rule:#34403A;
+  --tag:#F2C533; --tag-ink:#231C02; --good:#5FCB92; --good-bg:#1C3328;
+  --warn:#F0B54A; --warn-bg:#382C12; --bad:#F07A70; --bad-bg:#3A1E1B; --field:#262F2A;
+}
+*,*::before,*::after{box-sizing:inherit}
+html{height:100%;scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--paper);color:var(--ink);
+  font-family:"Barlow",system-ui,-apple-system,"Segoe UI",sans-serif;font-size:17px;line-height:1.45;
+  -webkit-text-size-adjust:100%}
+.wrap{max-width:480px;margin:0 auto;padding:20px 16px 40px}
+header{display:flex;align-items:center;gap:14px;margin-bottom:6px}
+.logo{position:relative;background:var(--tag);color:var(--tag-ink);
+  font-family:"Barlow Condensed","Arial Narrow",sans-serif;font-weight:800;font-size:30px;line-height:1;
+  padding:10px 16px 10px 30px;border-radius:4px 10px 10px 4px;letter-spacing:.2px}
+.logo::before{content:"";position:absolute;left:11px;top:50%;width:9px;height:9px;margin-top:-4.5px;
+  border-radius:50%;background:var(--paper)}
+.sub{color:var(--muted);margin:10px 0 20px;font-size:16px}
+.seg{display:grid;grid-template-columns:1fr 1fr;background:var(--field);border-radius:12px;padding:4px;margin-bottom:18px}
+.seg button{font:inherit;font-weight:600;border:0;background:transparent;color:var(--muted);padding:11px 8px;border-radius:9px;cursor:pointer}
+.seg button[aria-selected="true"]{background:var(--card);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.12)}
+.panel[hidden]{display:none}
+.scan{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;
+  font:inherit;font-weight:600;font-size:18px;background:var(--ink);color:var(--paper);
+  border:0;border-radius:12px;padding:15px;cursor:pointer}
+.scan svg{width:22px;height:22px}
+.scan{position:relative;overflow:hidden}
+.scan input[type=file]{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:0}
+.scan.busy{opacity:.6;pointer-events:none}
+.alt{display:block;text-align:center;margin-top:8px;font-size:15px;color:var(--muted);position:relative;overflow:hidden}
+.alt u{text-underline-offset:3px}
+.alt input[type=file]{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:0}
+.status{min-height:1.4em;font-size:15px;color:var(--muted);margin:8px 2px 14px}
+.status.err{color:var(--bad)}
+.shot{display:block;width:100%;max-height:220px;object-fit:contain;background:var(--field);border-radius:12px;margin:0 0 14px}
+.shot[hidden]{display:none}
+.card{background:var(--card);border:1px solid var(--rule);border-radius:14px;padding:16px}
+.row{margin-bottom:14px}
+.row:last-child{margin-bottom:0}
+label.l{display:block;font-weight:600;font-size:15px;margin-bottom:6px}
+.hint{font-weight:400;color:var(--muted)}
+.pair{display:flex;gap:8px;align-items:stretch}
+.money{position:relative;flex:1}
+.money span{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted);pointer-events:none}
+input,select{font:inherit;font-size:18px;color:var(--ink);background:var(--field);border:1.5px solid transparent;
+  border-radius:10px;padding:11px 12px;width:100%;min-width:0}
+.money input{padding-left:26px}
+select{width:auto;flex:0 0 auto;padding-right:8px}
+.per{align-self:center;color:var(--muted);flex:0 0 auto}
+input:focus,select:focus{outline:none;border-color:var(--ink)}
+:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.result{margin-top:16px;border-radius:14px;padding:16px;background:var(--field);color:var(--muted)}
+.result.good{background:var(--good-bg);color:var(--ink)}
+.result.warn{background:var(--warn-bg);color:var(--ink)}
+.result.bad{background:var(--bad-bg);color:var(--ink)}
+.verdict{font-family:"Barlow Condensed","Arial Narrow",sans-serif;font-weight:700;font-size:28px;line-height:1.1;margin-bottom:8px}
+.good .verdict{color:var(--good)} .warn .verdict{color:var(--warn)} .bad .verdict{color:var(--bad)}
+.figs{display:grid;grid-template-columns:1fr auto;gap:4px 12px;font-size:16px}
+.figs b{font-variant-numeric:tabular-nums;font-weight:600;text-align:right}
+.note{margin-top:10px;font-size:15px}
+.big{font-family:"Barlow Condensed","Arial Narrow",sans-serif;font-weight:800;font-size:44px;line-height:1;color:var(--ink);margin:2px 0 6px;font-variant-numeric:tabular-nums}
+footer{margin-top:28px;font-size:14px;color:var(--muted)}
+.vh{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+@media (prefers-reduced-motion: no-preference){.result{transition:background-color .2s}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header><div class="logo">Honest Merchant</div></header>
+  <p class="sub">Check the math on shelf labels and by-the-pound prices before you buy.</p>
+
+  <div class="seg" role="tablist">
+    <button role="tab" id="tab-shelf" aria-selected="true" aria-controls="p-shelf">Shelf label</button>
+    <button role="tab" id="tab-deli" aria-selected="false" aria-controls="p-deli">By the pound</button>
+  </div>
+
+  <!-- SHELF -->
+  <section class="panel" id="p-shelf" role="tabpanel" aria-labelledby="tab-shelf">
+    <div class="scanbox">
+      <label class="scan" data-mode="shelf">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="12" r="3.5"/></svg>
+        Scan a shelf label
+        <input type="file" accept="image/*" capture="environment" aria-label="Scan a shelf label with the camera">
+      </label>
+      <label class="alt" data-mode="shelf"><u>Or choose a photo you already took</u>
+        <input type="file" accept="image/*" aria-label="Choose a photo of the label">
+      </label>
+      <div class="status" aria-live="polite"></div>
+      <img class="shot" alt="Your label photo" hidden>
+    </div>
+    <div class="card">
+      <div class="row">
+        <label class="l" for="s-price">Price</label>
+        <div class="money"><span>$</span><input id="s-price" inputmode="decimal" placeholder="4.99"></div>
+      </div>
+      <div class="row">
+        <label class="l" for="s-size">Package size</label>
+        <div class="pair">
+          <input id="s-size" inputmode="decimal" placeholder="16">
+          <select id="s-size-u" aria-label="Package size unit"></select>
+        </div>
+      </div>
+      <div class="row">
+        <label class="l" for="s-up">Unit price on the label</label>
+        <div class="pair">
+          <div class="money"><span>$</span><input id="s-up" inputmode="decimal" placeholder="0.312"></div>
+          <span class="per">per</span>
+          <select id="s-up-u" aria-label="Unit price unit"></select>
+        </div>
+      </div>
+    </div>
+    <div class="result" id="s-result" aria-live="polite">Enter the three numbers from the label, or scan it.</div>
+  </section>
+
+  <!-- DELI -->
+  <section class="panel" id="p-deli" role="tabpanel" aria-labelledby="tab-deli" hidden>
+    <div class="scanbox">
+      <label class="scan" data-mode="weight">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="12" r="3.5"/></svg>
+        Scan a scale sticker
+        <input type="file" accept="image/*" capture="environment" aria-label="Scan a scale sticker with the camera">
+      </label>
+      <label class="alt" data-mode="weight"><u>Or choose a photo you already took</u>
+        <input type="file" accept="image/*" aria-label="Choose a photo of the label">
+      </label>
+      <div class="status" aria-live="polite"></div>
+      <img class="shot" alt="Your label photo" hidden>
+    </div>
+    <div class="card">
+      <div class="row">
+        <label class="l" for="d-rate">Price per pound</label>
+        <div class="pair">
+          <div class="money"><span>$</span><input id="d-rate" inputmode="decimal" placeholder="8.99"></div>
+          <span class="per">per</span>
+          <select id="d-rate-u" aria-label="Price is per">
+            <option value="lb">lb</option><option value="kg">kg</option><option value="oz">oz</option>
+          </select>
+        </div>
+      </div>
+      <div class="row">
+        <label class="l" for="d-wt">Weight</label>
+        <div class="pair">
+          <input id="d-wt" inputmode="decimal" placeholder="1.25">
+          <select id="d-wt-u" aria-label="Weight unit">
+            <option value="lb">lb</option><option value="oz">oz</option><option value="kg">kg</option><option value="g">g</option>
+          </select>
+        </div>
+      </div>
+      <div class="row">
+        <label class="l" for="d-charged">Price on the sticker <span class="hint">(optional)</span></label>
+        <div class="money"><span>$</span><input id="d-charged" inputmode="decimal" placeholder="11.24"></div>
+      </div>
+    </div>
+    <div class="result" id="d-result" aria-live="polite">Enter the price per pound and the weight to see what it should cost.</div>
+  </section>
+
+
+  <footer>Scanning reads the label right on your phone, and nothing is uploaded. It can misread small or glossy print, so compare the filled-in numbers with your photo. Differences of a cent or so usually come from rounding.</footer>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
+<script>
+(function(){
+  // ---------- units ----------
+  const U = {
+    oz:{d:"w",f:1,n:"oz"}, lb:{d:"w",f:16,n:"lb"}, g:{d:"w",f:0.0352740,n:"g"}, kg:{d:"w",f:35.2740,n:"kg"},
+    floz:{d:"v",f:1,n:"fl oz"}, pt:{d:"v",f:16,n:"pt"}, qt:{d:"v",f:32,n:"qt"}, gal:{d:"v",f:128,n:"gal"},
+    ml:{d:"v",f:0.0338140,n:"mL"}, l:{d:"v",f:33.8140,n:"L"},
+    ct:{d:"c",f:1,n:"count"}, c100:{d:"c",f:100,n:"100 count"}
+  };
+  const SIZE_UNITS = ["oz","lb","floz","pt","qt","gal","g","kg","ml","l","ct"];
+  const UP_UNITS = ["oz","lb","floz","pt","qt","gal","g","kg","ml","l","ct","c100"];
+  const fill = (sel, keys, def) => { sel.innerHTML = keys.map(k=>`<option value="${k}">${U[k].n}</option>`).join(""); sel.value = def; };
+  const $ = id => document.getElementById(id);
+  fill($("s-size-u"), SIZE_UNITS, "oz");
+  fill($("s-up-u"), UP_UNITS, "oz");
+
+  const num = v => { const x = parseFloat(String(v).replace(/[$,\s]/g,"")); return isFinite(x) ? x : NaN; };
+  const usd = (x, d=2) => (x<0?"−":"") + "$" + Math.abs(x).toFixed(d);
+  const upFmt = x => x < 1 ? usd(x,3) : usd(x,2);
+
+  // ---------- tabs ----------
+  const tabs = [["tab-shelf","p-shelf"],["tab-deli","p-deli"]];
+  function show(i){ tabs.forEach(([t,p],j)=>{ $(t).setAttribute("aria-selected", i===j); $(p).hidden = i!==j; }); }
+  tabs.forEach(([t],i)=> $(t).addEventListener("click", ()=>show(i)));
+
+  // ---------- shelf math ----------
+  function calcShelf(){
+    const out = $("s-result");
+    const price = num($("s-price").value), size = num($("s-size").value), up = num($("s-up").value);
+    const su = U[$("s-size-u").value], uu = U[$("s-up-u").value];
+    out.className = "result";
+    if (!(price>0 && size>0 && up>0)) { out.textContent = "Enter the three numbers from the label, or scan it."; return; }
+    if (su.d !== uu.d) {
+      out.className = "result warn";
+      out.innerHTML = `<div class="verdict">Units don't line up</div>The package is measured in ${su.n} but the unit price is per ${uu.n}. Stores sometimes do this on purpose to make comparisons harder. Check that both units are set correctly.`;
+      return;
+    }
+    const unitsInPkg = size * su.f / uu.f;            // package size expressed in unit-price units
+    const realUP = price / unitsInPkg;                 // what the unit price should be
+    const implied = up * unitsInPkg;                   // what the package should cost at the label's unit price
+    const diff = price - implied;                      // + means you pay more than the unit price suggests
+    const pct = (realUP - up) / up * 100;
+    const ok = Math.abs(diff) <= 0.02 || Math.abs(pct) <= 1;
+    const close = Math.abs(pct) <= 5;
+    let cls, head, note;
+    if (ok) { cls="good"; head="✓ The label checks out"; note="The unit price matches the shelf price, allowing for normal rounding."; }
+    else if (close) { cls="warn"; head="≈ Slightly off"; note = diff>0
+        ? `The unit price makes it look a bit cheaper than it is. You'd pay ${usd(diff)} more than the label's unit price suggests.`
+        : `The unit price makes it look a bit pricier than it is, which works in your favor by ${usd(-diff)}.`; }
+    else { cls="bad"; head="✗ The label doesn't match"; note = diff>0
+        ? `The unit price makes this look cheaper than it really is. At the shelf price you're paying ${usd(diff)} more than the unit price suggests. If there's a sale tag, the unit price may still be based on the regular price.`
+        : `The unit price is higher than the real cost, so this is actually ${usd(-diff)} cheaper than it looks. The label may be showing the regular price's unit price during a sale.`; }
+    out.className = "result " + cls;
+    out.innerHTML = `<div class="verdict">${head}</div>
+      <div class="figs">
+        <span>Label says</span><b>${upFmt(up)} / ${uu.n}</b>
+        <span>Real unit price</span><b>${upFmt(realUP)} / ${uu.n}</b>
+        <span>Difference</span><b>${pct>=0?"+":""}${pct.toFixed(1)}%</b>
+      </div><div class="note">${note}</div>`;
+  }
+  ["s-price","s-size","s-up","s-size-u","s-up-u"].forEach(id=>$(id).addEventListener("input",calcShelf));
+
+  // ---------- deli math ----------
+  const WT = {lb:1, oz:1/16, kg:2.20462, g:0.00220462}; // in lb
+  function calcDeli(){
+    const out = $("d-result");
+    const rate = num($("d-rate").value), wt = num($("d-wt").value), charged = num($("d-charged").value);
+    const ru = $("d-rate-u").value, wu = $("d-wt-u").value;
+    out.className = "result";
+    if (!(rate>0 && wt>0)) { out.textContent = "Enter the price per pound and the weight to see what it should cost."; return; }
+    const lbs = wt * WT[wu];
+    const expected = Math.round(rate / WT[ru] * lbs * 100) / 100;
+    let html = `<div>It should cost</div><div class="big">${usd(expected)}</div>
+      <div class="figs"><span>Weight in pounds</span><b>${lbs.toFixed(3)} lb</b></div>`;
+    if (charged > 0) {
+      const diff = Math.round((charged - expected)*100)/100;
+      let cls, head, note;
+      if (Math.abs(diff) <= 0.02) { cls="good"; head="✓ The sticker checks out"; note="The price charged matches the weight and price per pound."; }
+      else if (diff > 0) { cls="bad"; head=`✗ Overcharged by ${usd(diff)}`; note="Ask the counter to reweigh it. If the container or paper wasn't subtracted (tare), the weight can come out high."; }
+      else { cls="warn"; head=`≈ Undercharged by ${usd(-diff)}`; note="The sticker is lower than the math. Good for you, but worth knowing the scale or rate may be off."; }
+      out.className = "result " + cls;
+      html = `<div class="verdict">${head}</div>
+        <div class="figs"><span>Should cost</span><b>${usd(expected)}</b><span>Sticker says</span><b>${usd(charged)}</b><span>Weight in pounds</span><b>${lbs.toFixed(3)} lb</b></div>
+        <div class="note">${note}</div>`;
+    }
+    out.innerHTML = html;
+  }
+  ["d-rate","d-wt","d-charged","d-rate-u","d-wt-u"].forEach(id=>$(id).addEventListener("input",calcDeli));
+  $("d-rate-u").addEventListener("change", ()=>{ $("d-rate").closest(".row").querySelector("label").textContent = "Price per " + ({lb:"pound",kg:"kilogram",oz:"ounce"})[$("d-rate-u").value]; });
+
+  // ---------- on-device scanning (Tesseract.js) ----------
+  let busy = false, worker = null, workerReady = null;
+  const boxFor = m => document.querySelector(`.scan[data-mode="${m}"]`).closest(".scanbox");
+  function setStatus(m, text, err){ const s = boxFor(m).querySelector(".status"); s.textContent = text; s.classList.toggle("err", !!err); }
+
+  function getWorker(m){
+    if (!workerReady) {
+      workerReady = Tesseract.createWorker("eng", 1, {
+        logger: p => {
+          if (p.status && /loading|initializ/i.test(p.status)) setStatus(m, "Getting the scanner ready (first time only)…");
+          else if (p.status === "recognizing text") setStatus(m, `Reading the label… ${Math.round((p.progress||0)*100)}%`);
+        }
+      }).then(w => (worker = w));
+    }
+    return workerReady;
+  }
+
+  // Shrink, grayscale and boost contrast so small print reads better.
+  async function prep(file){
+    const url = URL.createObjectURL(file);
+    try{
+      const img = await new Promise((res, rej)=>{ const i = new Image(); i.onload=()=>res(i); i.onerror=rej; i.src=url; });
+      const max = 1800, k = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+      const c = document.createElement("canvas");
+      c.width = Math.round(img.naturalWidth*k); c.height = Math.round(img.naturalHeight*k);
+      const g = c.getContext("2d"); g.drawImage(img, 0, 0, c.width, c.height);
+      const d = g.getImageData(0,0,c.width,c.height), a = d.data;
+      for (let i=0;i<a.length;i+=4){
+        let y = 0.299*a[i] + 0.587*a[i+1] + 0.114*a[i+2];
+        y = Math.max(0, Math.min(255, (y-128)*1.5 + 128));
+        a[i]=a[i+1]=a[i+2]=y;
+      }
+      g.putImageData(d,0,0);
+      return c;
+    } finally { URL.revokeObjectURL(url); }
+  }
+
+  const UNIT_MAP = [
+    [/^fl\.?\s*oz|^fluid\s*oun/i,"floz"],[/^oz|^ounce/i,"oz"],[/^lbs?|^pound/i,"lb"],
+    [/^kg|^kilo/i,"kg"],[/^g\b|^gram/i,"g"],[/^ml|^millil/i,"ml"],[/^l\b|^lt|^liter|^litre/i,"l"],
+    [/^gal/i,"gal"],[/^qt|^quart/i,"qt"],[/^pt|^pint/i,"pt"],[/^ct|^count|^each|^ea\b|^pk|^pack/i,"ct"]
+  ];
+  const unitOf = s => { for (const [re,u] of UNIT_MAP) if (re.test(s.trim())) return u; return null; };
+  const UNIT_RE = "(fl\\.?\\s*oz|fluid\\s*ounces?|oz|ounces?|lbs?|pounds?|kg|g|grams?|ml|l|lt|liters?|gal|qt|pt|ct|count|each|ea|pk)";
+
+  function parseShelf(raw){
+    const t = raw.replace(/[|]/g," ").replace(/[ \t]+/g," ");
+    const r = {};
+    // unit price: "$0.31 per oz", "31.2¢ / oz", "0.312 PER OUNCE"; also "per 100 ct"
+    const upRe = new RegExp("\\$?\\s*(\\d*[.,]?\\d+)\\s*(¢|c\\b)?\\s*(?:per|/|PER)\\s*(100\\s*)?" + UNIT_RE, "i");
+    const up = t.match(upRe);
+    if (up) {
+      let v = parseFloat(up[1].replace(",", "."));
+      if (up[2] || (!/\$/.test(up[0]) && v >= 1 && !/\./.test(up[1]) && v > 20)) v = v/100;
+      r.up = Math.round(v*10000)/10000; r.upUnit = up[3] ? "c100" : unitOf(up[4]);
+    }
+    const rest = up ? t.replace(up[0], " ") : t;
+    // package size: "16 oz", "12 fl oz", "1.5 lb" (not following per or /)
+    const sizeRe = new RegExp("(?<!per\\s|/\\s?)(\\d+(?:\\.\\d+)?)\\s*" + UNIT_RE + "\\b", "ig");
+    let m, sizes = [];
+    while ((m = sizeRe.exec(rest))) sizes.push({v: parseFloat(m[1]), u: unitOf(m[2])});
+    sizes = sizes.filter(s => s.v > 0 && s.u);
+    if (sizes.length) { r.size = sizes[0].v; r.sizeUnit = sizes[0].u; }
+    // retail price: dollar amounts, skipping "reg/was" prices; big shelf prices often print as "4 99"
+    const lines = rest.split(/\n/);
+    const cands = [];
+    for (const ln of lines) {
+      const isReg = /\b(reg|regular|was|orig)\b/i.test(ln);
+      const pr = /\$\s?(\d{1,3})(?:[.,](\d{2})|\s(\d{2})\b)?/g;
+      let x; while ((x = pr.exec(ln))) {
+        const cents = x[2] || x[3];
+        const v = parseFloat(x[1] + "." + (cents || "00"));
+        if (v > 0 && v < 500) cands.push({v, isReg, hadCents: !!cents});
+      }
+      if (!/\$/.test(ln)) { const y = ln.match(/^\s*(\d{1,2})\s?[.,]?\s?(\d{2})\s*$/); if (y) cands.push({v: parseFloat(y[1]+"."+y[2]), isReg, hadCents:true}); }
+    }
+    const now = cands.filter(c => !c.isReg && c.v !== r.up);
+    const reg = cands.filter(c => c.isReg);
+    if (now.length) r.price = Math.max(...now.map(c=>c.v));
+    if (reg.length) r.regular = reg[0].v;
+    return r;
+  }
+
+  function parseWeight(raw){
+    const t = raw.replace(/[|]/g," ");
+    const nums = (t.match(/\d+[.,]\d{2,3}/g) || []).map(s => parseFloat(s.replace(",", ".")));
+    const r = {};
+    // Scale stickers print weight × price/lb = total; find the trio that multiplies out.
+    let best = null;
+    for (let i=0;i<nums.length;i++) for (let j=0;j<nums.length;j++) for (let k=0;k<nums.length;k++){
+      if (i===j||j===k||i===k) continue;
+      const w=nums[i], p=nums[j], tot=nums[k];
+      if (w<=0 || w>30 || p<=0) continue;
+      const err = Math.abs(w*p - tot);
+      if (err <= 0.03 && (!best || err < best.err)) best = {w,p,tot,err};
+    }
+    if (best) { r.wt = best.w; r.rate = best.p; r.total = best.tot; return r; }
+    // otherwise use labels near the numbers
+    const grab = re => { const m = t.match(re); return m ? parseFloat(m[1].replace(",", ".")) : undefined; };
+    r.rate  = grab(/(?:\$\s*\/\s*lb|price\s*\/?\s*lb|per\s*lb|\/\s*lb)[^\d]{0,12}(\d+[.,]\d{2})/i) ?? grab(/(\d+[.,]\d{2})\s*(?:\/|per)\s*lb/i);
+    r.wt    = grab(/net\s*wt[^\d]{0,12}(\d+[.,]\d{1,3})/i) ?? grab(/(\d+[.,]\d{2,3})\s*lb\b/i);
+    r.total = grab(/total[^\d]{0,15}(\d+[.,]\d{2})/i) ?? grab(/you\s*pay[^\d]{0,12}(\d+[.,]\d{2})/i);
+    return r;
+  }
+
+  function put(id, v){ if (v !== null && v !== undefined && isFinite(v)) $(id).value = v; }
+  function setSel(id, v){ const s=$(id); if (v && [...s.options].some(o=>o.value===v)) s.value = v; }
+
+  async function scan(file, mode){
+    busy = true;
+    document.querySelectorAll(".scan,.alt").forEach(b=>b.classList.add("busy"));
+    const shot = boxFor(mode).querySelector(".shot");
+    shot.src = URL.createObjectURL(file); shot.hidden = false;
+    setStatus(mode, "Getting the scanner ready…");
+    try{
+      if (!window.Tesseract) throw new Error("noscanner");
+      const [w, canvas] = await Promise.all([getWorker(mode), prep(file)]);
+      const { data } = await w.recognize(canvas);
+      const text = data.text || "";
+      let filled = 0;
+      if (mode === "weight") {
+        const r = parseWeight(text);
+        if (r.rate) { put("d-rate", r.rate); setSel("d-rate-u","lb"); $("d-rate-u").dispatchEvent(new Event("change")); filled++; }
+        if (r.wt) { put("d-wt", r.wt); setSel("d-wt-u","lb"); filled++; }
+        if (r.total) { put("d-charged", r.total); filled++; }
+        calcDeli();
+      } else {
+        const r = parseShelf(text);
+        if (r.price) { put("s-price", r.price); filled++; }
+        if (r.size) { put("s-size", r.size); setSel("s-size-u", r.sizeUnit); filled++; }
+        if (r.up) { put("s-up", r.up); setSel("s-up-u", r.upUnit); filled++; }
+        calcShelf();
+      }
+      if (filled === 3) setStatus(mode, "Filled in from your photo. Compare the numbers with the label before trusting the result.");
+      else if (filled > 0) setStatus(mode, `Read ${filled} of 3 numbers. Type the rest in from the photo above.`, true);
+      else setStatus(mode, "Couldn't read the numbers. Try again closer and straight on, without glare, or type them in.", true);
+    } catch(e){
+      setStatus(mode, e && e.message === "noscanner"
+        ? "The scanner didn't load. Check your internet connection and reload the page."
+        : "Something went wrong reading the photo. Try another photo or type the numbers in.", true);
+    } finally {
+      busy = false;
+      document.querySelectorAll(".scanbox input[type=file]").forEach(i=>i.value="");
+      document.querySelectorAll(".scan,.alt").forEach(b=>b.classList.remove("busy"));
+    }
+  }
+
+  document.querySelectorAll(".scanbox input[type=file]").forEach(inp=>inp.addEventListener("change", ()=>{
+    const f = inp.files && inp.files[0];
+    if (!f || busy) return;
+    scan(f, inp.closest("label").dataset.mode);
+  }));
+})();
+</script>
+</body>
+</html>
